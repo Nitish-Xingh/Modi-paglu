@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modi Paglu</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      overflow: hidden;
+      background: linear-gradient(to bottom, #87ceeb, #d0f4ff);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      background: linear-gradient(to bottom, #70c5ce, #b2f0ff);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.3);
+      border-radius: 20px;
+      width: 95%;
+      max-width: 500px;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // 🖼️ Images
+    const birdImg = new Image();
+    birdImg.src = "bird.png";
+    const wallImg = new Image();
+    wallImg.src = "wall.png";
+
+    // 🔊 Sounds
+    const sfx = {
+      start: new Audio("sfx/start.wav"),
+      flap: new Audio("sfx/flap.wav"),
+      score: new Audio("sfx/score.wav"),
+      hit: new Audio("sfx/hit.wav"),
+      die: new Audio("sfx/die.wav"),
+      bgm: new Audio("music.mp3") // 🎶 Background music placeholder
+    };
+    sfx.bgm.loop = true; // loop background music
+
+    // ☁️ Clouds
+    const clouds = Array.from({ length: 5 }).map(() => ({
+      x: Math.random() * 400,
+      y: Math.random() * 200,
+      size: 40 + Math.random() * 40,
+      speed: 0.2 + Math.random() * 0.3,
+    }));
+
+    // 🐦 Bird (Your face)
+    let bird = {
+      x: 80,
+      y: 200,
+      width: 45,
+      height: 45,
+      gravity: 0.18,
+      lift: -6,
+      velocity: 0,
+    };
+
+    let pipes = [];
+    let frame = 0;
+    let score = 0;
+    let speed = 1.7;
+    let gameOver = false;
+    let started = false;
+
+    function drawBackground() {
+      ctx.fillStyle = "#87ceeb";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      clouds.forEach((c) => {
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.size * 0.4, 0, Math.PI * 2);
+        ctx.arc(c.x + c.size * 0.4, c.y - c.size * 0.2, c.size * 0.5, 0, Math.PI * 2);
+        ctx.arc(c.x + c.size * 0.8, c.y, c.size * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        c.x -= c.speed;
+        if (c.x + c.size < 0) {
+          c.x = canvas.width + Math.random() * 100;
+          c.y = Math.random() * 200;
+        }
+      });
+
+      ctx.fillStyle = "#228B22";
+      ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+    }
+
+    function drawBird() {
+      if (birdImg.complete) ctx.drawImage(birdImg, bird.x, bird.y, bird.width, bird.height);
+      else {
+        ctx.fillStyle = "yellow";
+        ctx.beginPath();
+        ctx.arc(bird.x + 20, bird.y + 20, 20, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawPipes() {
+      pipes.forEach((p) => {
+        if (wallImg.complete) {
+          ctx.drawImage(wallImg, p.x, 0, p.width, p.top);
+          ctx.drawImage(wallImg, p.x, canvas.height - p.bottom, p.width, p.bottom);
+        } else {
+          ctx.fillStyle = "#444";
+          ctx.fillRect(p.x, 0, p.width, p.top);
+          ctx.fillRect(p.x, canvas.height - p.bottom, p.width, p.bottom);
+        }
+      });
+    }
+
+    function updateBird() {
+      bird.velocity += bird.gravity;
+      bird.y += bird.velocity;
+      if (bird.y + bird.height >= canvas.height - 60) {
+        bird.y = canvas.height - 60 - bird.height;
+        sfx.hit.play();
+        setTimeout(() => sfx.die.play(), 150);
+        gameOver = true;
+        sfx.bgm.pause();
+      }
+      if (bird.y < 0) bird.y = 0;
+    }
+
+    function updatePipes() {
+      if (frame % 100 === 0) {
+        let gap = 130;
+        let top = Math.random() * (canvas.height / 2);
+        pipes.push({
+          x: canvas.width,
+          width: 55,
+          top: top,
+          bottom: canvas.height - top - gap - 60,
+        });
+      }
+      pipes.forEach((p, i) => {
+        p.x -= speed;
+        if (p.x + p.width < 0) {
+          pipes.splice(i, 1);
+          score++;
+          sfx.score.play();
+          if (speed < 3.2) speed += 0.05;
+        }
+      });
+    }
+
+    function checkCollision() {
+      pipes.forEach((p) => {
+        if (
+          bird.x < p.x + p.width &&
+          bird.x + bird.width > p.x &&
+          (bird.y < p.top || bird.y + bird.height > canvas.height - p.bottom)
+        ) {
+          sfx.hit.play();
+          setTimeout(() => sfx.die.play(), 150);
+          gameOver = true;
+          sfx.bgm.pause();
+        }
+      });
+    }
+
+    function drawScore() {
+      ctx.fillStyle = "#000";
+      ctx.font = "24px Comic Sans MS";
+      ctx.fillText(`Score: ${score}`, 10, 30);
+    }
+
+    function drawGameOver() {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#fff";
+      ctx.font = "36px Comic Sans MS";
+      ctx.fillText("GAME OVER 💀", 70, canvas.height / 2 - 20);
+      ctx.font = "22px Comic Sans MS";
+      ctx.fillText(`Score: ${score}`, 160, canvas.height / 2 + 20);
+      ctx.fillText("Tap or press space to restart", 45, canvas.height / 2 + 60);
+    }
+
+    function drawStartScreen() {
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#fff";
+      ctx.font = "28px Comic Sans MS";
+      ctx.fillText("Tap or press space to start 🕹️", 35, canvas.height / 2);
+    }
+
+    function loop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
+      drawBird();
+
+      if (!started) drawStartScreen();
+      else if (gameOver) drawGameOver();
+      else {
+        drawPipes();
+        updateBird();
+        updatePipes();
+        checkCollision();
+        drawScore();
+        frame++;
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    function flap() {
+      if (!started) {
+        started = true;
+        sfx.start.play();
+        sfx.bgm.currentTime = 0;
+        sfx.bgm.play(); // 🎶 start music
+      } else if (gameOver) restartGame();
+      else {
+        bird.velocity = bird.lift;
+        sfx.flap.play();
+      }
+    }
+
+    function restartGame() {
+      bird.y = 200;
+      bird.velocity = 0;
+      pipes = [];
+      score = 0;
+      frame = 0;
+      speed = 1.7;
+      gameOver = false;
+      started = false;
+      sfx.bgm.pause(); // stop bgm when restarting
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space") flap();
+    });
+    canvas.addEventListener("touchstart", flap);
+
+    loop();
+  </script>
+</body>
+</html>
